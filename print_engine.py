@@ -29,7 +29,9 @@ class PrintEngine:
             try:
                 self._win32print.StartPagePrinter(handle)
                 try:
-                    payload = text.encode("cp437", errors="replace")
+                    # latin-1 gives a 1:1 mapping for ESC/POS bytes 0x00-0xFF.
+                    # This is required for raster/logo data embedded in the payload.
+                    payload = text.encode("latin-1", errors="replace")
                     self._win32print.WritePrinter(handle, payload)
                 finally:
                     self._win32print.EndPagePrinter(handle)
