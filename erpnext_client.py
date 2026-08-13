@@ -16,7 +16,7 @@ class ERPNextClient:
             raise RuntimeError("ERPNext URL and RB_AGENT_TOKEN must be configured.")
         self.base_url = settings.erpnext_url.rstrip("/")
         self.headers = {
-            "Authorization": f"Bearer {settings.erpnext_token}",
+            "X-RB-Print-Token": settings.erpnext_token,
             "Accept": "application/json",
         }
         self.timeout = settings.erpnext_timeout
