@@ -1,0 +1,60 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches:
+      - milestone-2-desktop-installer
+      - milestone-1-foundation
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name "RB Print Agent" `
+            --hidden-import=win32print `
+            --hidden-import=win32crypt `
+            --collect-all pystray `
+            --collect-all PIL `
+            desktop_app.py
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path installer-output | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\RBPrintAgent.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: RB-Print-Agent-Windows-Installer
+          path: installer-output\RB-Print-Agent-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload portable executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: RB-Print-Agent-Windows-Portable
+          path: dist\RB Print Agent.exe
+          if-no-files-found: error
