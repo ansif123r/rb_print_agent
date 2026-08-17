@@ -45,6 +45,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path installer-output | Out-Null
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\RBPrintAgent.iss
 
+      - name: Verify installer
+        shell: powershell
+        run: |
+          $installer = Get-ChildItem -Path installer-output -Filter "RB-Print-Agent-Setup-*.exe" -File
+          if (-not $installer) { throw "Installer EXE was not created." }
+          Write-Host "Installer created: $($installer.FullName)"
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
