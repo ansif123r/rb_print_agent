@@ -14,7 +14,7 @@ import uvicorn
 from config_store import is_configured, load_config, save_config
 
 APP_NAME = "RB Print Agent"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 DEFAULT_URL = "https://rbfreshmart.m.frappe.cloud"
 
 
@@ -29,10 +29,27 @@ def configure_environment() -> None:
 
 def restart_application() -> None:
     executable = sys.executable
+    env = os.environ.copy()
+
+    # PyInstaller one-file applications need a clean bootloader environment
+    # when the already-running executable is intentionally restarted. Without
+    # this, the bootloader can reject the child process with a security
+    # validation error about the parent executable path.
     if getattr(sys, "frozen", False):
-        subprocess.Popen([executable], close_fds=True)
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        subprocess.Popen(
+            [executable],
+            env=env,
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+        )
     else:
-        subprocess.Popen([executable, os.path.abspath(__file__)], close_fds=True)
+        subprocess.Popen(
+            [executable, os.path.abspath(__file__)],
+            env=env,
+            close_fds=True,
+        )
+
     os._exit(0)
 
 
