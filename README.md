@@ -1,34 +1,31 @@
-# RB Device Agent
+# RB Print Agent
 
-Windows device bridge for R B FRESH MART, starting with direct USB/Windows printer support.
+Windows desktop print bridge for R B FRESH MART. It connects ERPNext to local Windows thermal printers and prints queued receipts without opening a browser print dialog.
 
-## Milestone 1
+## Desktop installation
 
-- Detect installed Windows printers.
-- Expose a local HTTP API on `127.0.0.1:8765`.
-- Provide an ESC/POS test-print endpoint.
-- Provide a RAW text printing endpoint.
-- Keep the printer layer independent from future ERPNext communication.
+The recommended deployment is the Windows installer produced by GitHub Actions:
 
-## Run on Windows
+- `RB-Print-Agent-Setup-1.0.0.exe`
+- Windows 10/11 x64-compatible systems
+- No Python installation required
+- No Git installation required
+- Starts automatically with Windows
+- Stores the ERPNext token in the Windows machine's protected configuration
+- Detects installed Windows printers
+- Provides Test Connection and Test Printer actions
 
-Requirements:
+After installation, open **RB Print Agent** from the Start Menu if setup is required. Enter the ERPNext URL, RB Print token and the local printer name. The agent then runs in the background and polls the ERPNext RB Print Queue.
 
-- Windows 10/11
-- Python 3.11+
+## Development mode
 
-Create the environment:
+Python 3.11+ can still be used for development:
 
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-Start the agent:
-
-```powershell
 python app.py
 ```
 
@@ -36,19 +33,13 @@ The local API is available at `http://127.0.0.1:8765`.
 
 ### Check health
 
-Open:
-
-`http://127.0.0.1:8765/health`
+Open `http://127.0.0.1:8765/health`.
 
 ### List printers
 
-Open:
-
-`http://127.0.0.1:8765/printers`
+Open `http://127.0.0.1:8765/printers`.
 
 ### Test print
-
-PowerShell example:
 
 ```powershell
 Invoke-RestMethod -Method Post `
@@ -57,4 +48,4 @@ Invoke-RestMethod -Method Post `
   -Body '{"printer":"YOUR WINDOWS PRINTER NAME"}'
 ```
 
-The default test uses ESC/POS raw commands, which is appropriate for supported thermal receipt printers.
+The default test uses ESC/POS raw commands for supported thermal receipt printers.
