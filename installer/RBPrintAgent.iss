@@ -10,7 +10,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\RB Print Agent
 DefaultGroupName={#MyAppName}
-OutputDir=installer-output
+OutputDir=..\installer-output
 OutputBaseFilename=RB-Print-Agent-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -21,7 +21,7 @@ PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
-Source: "dist\RB Print Agent.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\RB Print Agent.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\RB Print Agent Settings"; Filename: "{app}\{#MyAppExeName}"
