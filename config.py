@@ -1,18 +1,22 @@
 from dataclasses import dataclass
-import os
+
+from config_store import load_config
+
+
+_config = load_config()
 
 
 @dataclass(frozen=True)
 class Settings:
-    host: str = os.getenv("RB_AGENT_HOST", "127.0.0.1")
-    port: int = int(os.getenv("RB_AGENT_PORT", "8765"))
-    app_name: str = "RB Device Agent"
-    version: str = "0.2.0"
-    erpnext_url: str = os.getenv("RB_AGENT_ERPNEXT_URL", "").strip()
-    erpnext_token: str = os.getenv("RB_AGENT_TOKEN", "").strip()
-    erpnext_timeout: float = float(os.getenv("RB_AGENT_ERPNEXT_TIMEOUT", "15"))
-    poll_interval: float = float(os.getenv("RB_AGENT_POLL_INTERVAL", "3"))
-    printer_name: str = os.getenv("RB_AGENT_PRINTER", "POS80 Printer").strip()
+    host: str = "127.0.0.1"
+    port: int = 8765
+    app_name: str = "RB Print Agent"
+    version: str = "1.0.0"
+    erpnext_url: str = str(_config.get("erpnext_url", "")).strip()
+    erpnext_token: str = str(_config.get("erpnext_token", "")).strip()
+    erpnext_timeout: float = float(_config.get("erpnext_timeout", 15))
+    poll_interval: float = float(_config.get("poll_interval", 3))
+    printer_name: str = str(_config.get("printer_name", "POS80 Printer")).strip()
 
 
 settings = Settings()
