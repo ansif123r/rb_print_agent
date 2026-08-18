@@ -39,6 +39,13 @@ jobs:
         shell: powershell
         run: choco install innosetup --no-progress -y
 
+      - name: Generate installer icon
+        shell: powershell
+        run: |
+          $iconData = [Convert]::FromBase64String((Get-Content -Raw installer\rb_fresh_mart.ico.b64).Trim())
+          [IO.File]::WriteAllBytes("rb_fresh_mart.ico", $iconData)
+          if (-not (Test-Path "rb_fresh_mart.ico")) { throw "Installer icon was not created." }
+
       - name: Build installer
         shell: powershell
         run: |
