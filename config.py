@@ -11,7 +11,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8765
     app_name: str = "RB Print Agent"
-    version: str = "1.0.0"
+    version: str = "0.3.0"
     erpnext_url: str = str(_config.get("erpnext_url", "")).strip()
     erpnext_token: str = str(_config.get("erpnext_token", "")).strip()
     erpnext_timeout: float = float(_config.get("erpnext_timeout", 15))
