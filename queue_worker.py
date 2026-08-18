@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
-from typing import Any
 
 from config import settings
 from erpnext_client import ERPNextClient
@@ -48,7 +46,7 @@ class QueueWorker:
 
                 copies = max(1, min(int(job.get("copies") or 1), 20))
                 for _ in range(copies):
-                    engine.raw_text(settings.printer_name, str(payload))
+                    engine.print_payload(settings.printer_name, str(payload))
 
                 client.update_job_status(job_name, "Printed")
                 logger.info("Printed ERPNext job %s", job_name)
