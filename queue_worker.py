@@ -13,6 +13,8 @@ logger = logging.getLogger("rb_device_agent.queue")
 class QueueWorker:
     def __init__(self) -> None:
         self._stop = threading.Event()
+        self._client: ERPNextClient | None = None
+        self._engine: PrintEngine | None = None
 
     def stop(self) -> None:
         self._stop.set()
@@ -30,12 +32,17 @@ class QueueWorker:
         if not settings.erpnext_url or not settings.erpnext_token:
             return
 
-        client = ERPNextClient()
+        if self._client is None:
+            self._client = ERPNextClient()
+        if self._engine is None:
+            self._engine = PrintEngine()
+
+        client = self._client
+        engine = self._engine
         jobs = client.get_pending_jobs(settings.printer_name)
         if not jobs:
             return
 
-        engine = PrintEngine()
         for job in jobs:
             job_name = str(job["name"])
             try:
