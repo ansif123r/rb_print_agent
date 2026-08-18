@@ -47,8 +47,46 @@ class PrintEngine:
     def raw_bytes(self, printer_name: str, payload: bytes) -> None:
         self._write_raw(printer_name, payload)
 
+    @staticmethod
+    def _content_bbox(pixmap, threshold: int = 250):
+        """Return the non-white content rectangle of a grayscale pixmap."""
+        width = pixmap.width
+        height = pixmap.height
+        samples = pixmap.samples
+        stride = pixmap.stride
+
+        left = width
+        top = height
+        right = -1
+        bottom = -1
+
+        for y in range(height):
+            row_start = y * stride
+            for x in range(width):
+                if samples[row_start + x] < threshold:
+                    if x < left:
+                        left = x
+                    if x > right:
+                        right = x
+                    if y < top:
+                        top = y
+                    if y > bottom:
+                        bottom = y
+
+        if right < left or bottom < top:
+            return None
+
+        return left, top, right + 1, bottom + 1
+
     def pdf(self, printer_name: str, pdf_bytes: bytes) -> None:
-        """Render an ERPNext PDF print format to ESC/POS raster and print it RAW."""
+        """Render an ERPNext PDF print format to ESC/POS raster and print it RAW.
+
+        ERPNext can generate a PDF page that is larger than the actual 80mm print
+        format. The receipt itself may occupy only a small centered portion of an
+        A4/Letter-sized PDF page. We crop the rendered page to its actual ink
+        content before scaling it to the full 576-dot thermal width. This prevents
+        the receipt from printing tiny in the middle of an 80mm roll.
+        """
         if not pdf_bytes:
             raise ValueError("PDF content is empty.")
 
@@ -65,12 +103,47 @@ class PrintEngine:
             chunks: list[bytes] = [b"\x1b@"]
             for page_number in range(document.page_count):
                 page = document.load_page(page_number)
-                scale = self.MAX_DOTS / page.rect.width
+
+                # First render at a moderate scale so we can identify the actual
+                # printed content rectangle without scaling a large blank PDF page.
+                probe_scale = 2.0
+                probe = page.get_pixmap(
+                    matrix=fitz.Matrix(probe_scale, probe_scale),
+                    colorspace=fitz.csGRAY,
+                    alpha=False,
+                )
+                bbox = self._content_bbox(probe)
+                if not bbox:
+                    continue
+
+                left, top, right, bottom = bbox
+                crop_rect = fitz.Rect(
+                    left / probe_scale,
+                    top / probe_scale,
+                    right / probe_scale,
+                    bottom / probe_scale,
+                )
+
+                # Add a tiny safety margin so antialiased edges are not clipped.
+                margin_x = min(1.0, crop_rect.width * 0.01)
+                margin_y = min(1.0, crop_rect.height * 0.005)
+                crop_rect = fitz.Rect(
+                    max(page.rect.x0, crop_rect.x0 - margin_x),
+                    max(page.rect.y0, crop_rect.y0 - margin_y),
+                    min(page.rect.x1, crop_rect.x1 + margin_x),
+                    min(page.rect.y1, crop_rect.y1 + margin_y),
+                )
+
+                # Scale the actual receipt content, not the surrounding PDF page,
+                # to the full 80mm thermal width.
+                scale = self.MAX_DOTS / crop_rect.width
                 pixmap = page.get_pixmap(
                     matrix=fitz.Matrix(scale, scale),
                     colorspace=fitz.csGRAY,
                     alpha=False,
+                    clip=crop_rect,
                 )
+
                 width = pixmap.width
                 height = pixmap.height
                 samples = pixmap.samples
