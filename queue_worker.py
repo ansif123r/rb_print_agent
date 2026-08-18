@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import base64
 import logging
 import threading
-import time
 from typing import Any
 
 from config import settings
@@ -10,6 +10,7 @@ from erpnext_client import ERPNextClient
 from print_engine import PrintEngine
 
 logger = logging.getLogger("rb_device_agent.queue")
+PDF_PREFIX = "RBPDF1:"
 
 
 class QueueWorker:
@@ -42,13 +43,17 @@ class QueueWorker:
             job_name = str(job["name"])
             try:
                 client.update_job_status(job_name, "Printing")
-                payload = job.get("payload")
+                payload = str(job.get("payload") or "")
                 if not payload:
                     raise ValueError("Print job has no payload")
 
                 copies = max(1, min(int(job.get("copies") or 1), 20))
                 for _ in range(copies):
-                    engine.raw_text(settings.printer_name, str(payload))
+                    if payload.startswith(PDF_PREFIX):
+                        pdf_bytes = base64.b64decode(payload[len(PDF_PREFIX):], validate=True)
+                        engine.pdf(settings.printer_name, pdf_bytes)
+                    else:
+                        engine.raw_text(settings.printer_name, payload)
 
                 client.update_job_status(job_name, "Printed")
                 logger.info("Printed ERPNext job %s", job_name)
