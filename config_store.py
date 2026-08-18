@@ -13,7 +13,7 @@ DEFAULTS: dict[str, Any] = {
     "erpnext_url": "https://rbfreshmart.m.frappe.cloud",
     "printer_name": "POS80 Printer",
     "erpnext_timeout": 15.0,
-    "poll_interval": 3.0,
+    "poll_interval": 0.75,
 }
 
 
@@ -55,18 +55,18 @@ def load_config() -> dict[str, Any]:
     data["erpnext_token"] = os.getenv("RB_AGENT_TOKEN", _unprotect(str(data.get("erpnext_token", "")))).strip()
     data["printer_name"] = os.getenv("RB_AGENT_PRINTER", str(data.get("printer_name", "POS80 Printer"))).strip()
     data["erpnext_timeout"] = float(os.getenv("RB_AGENT_ERPNEXT_TIMEOUT", data.get("erpnext_timeout", 15)))
-    data["poll_interval"] = float(os.getenv("RB_AGENT_POLL_INTERVAL", data.get("poll_interval", 3)))
+    data["poll_interval"] = min(max(float(os.getenv("RB_AGENT_POLL_INTERVAL", data.get("poll_interval", 0.75))), 0.25), 0.75)
     return data
 
 
-def save_config(erpnext_url: str, token: str, printer_name: str, timeout: float = 15.0, poll_interval: float = 3.0) -> None:
+def save_config(erpnext_url: str, token: str, printer_name: str, timeout: float = 15.0, poll_interval: float = 0.75) -> None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "erpnext_url": erpnext_url.strip().rstrip("/"),
         "erpnext_token": _protect(token.strip()),
         "printer_name": printer_name.strip(),
         "erpnext_timeout": float(timeout),
-        "poll_interval": float(poll_interval),
+        "poll_interval": min(max(float(poll_interval), 0.25), 0.75),
     }
     CONFIG_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
