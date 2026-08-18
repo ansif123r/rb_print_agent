@@ -88,7 +88,7 @@ class PrintEngine:
         return left, top, right + 1, bottom + 1
 
     @staticmethod
-    def _mono_raster_rows(pix) -> bytes:
+    def _mono_raster_rows(pix, threshold: int = 180) -> bytes:
         width = pix.width
         height = pix.height
         channels = pix.n
@@ -106,7 +106,7 @@ class PrintEngine:
                 g = samples[offset + 1]
                 b = samples[offset + 2]
                 gray = (299 * r + 587 * g + 114 * b) // 1000
-                if gray < self.THRESHOLD:
+                if gray < threshold:
                     output[dst_row + (x // 8)] |= 0x80 >> (x % 8)
 
         return bytes(output)
@@ -146,8 +146,6 @@ class PrintEngine:
                 if page.rect.width <= 0:
                     continue
 
-                # Probe the page to locate the actual receipt content. This removes
-                # the large blank margins from an A4/Letter-sized PDF wrapper.
                 probe_scale = 2.0
                 probe = page.get_pixmap(
                     matrix=fitz.Matrix(probe_scale, probe_scale),
@@ -166,7 +164,6 @@ class PrintEngine:
                     bottom / probe_scale,
                 )
 
-                # Small margin to avoid clipping antialiased edges.
                 margin_x = min(1.0, crop.width * 0.01)
                 margin_y = min(1.0, crop.height * 0.005)
                 crop = fitz.Rect(
@@ -184,8 +181,6 @@ class PrintEngine:
                     clip=crop,
                 )
 
-                # Remove trailing white rows. This preserves the compact receipt
-                # height instead of feeding the blank remainder of the PDF page.
                 height = pix.height
                 samples = pix.samples
                 stride = pix.stride
@@ -201,8 +196,6 @@ class PrintEngine:
                     height -= 1
 
                 if height != pix.height:
-                    # Re-render with the cropped height so the raster payload is
-                    # exactly the receipt content that needs to be printed.
                     crop2 = fitz.Rect(crop.x0, crop.y0, crop.x1, crop.y0 + height / scale)
                     pix = page.get_pixmap(
                         matrix=fitz.Matrix(scale, scale),
@@ -211,7 +204,7 @@ class PrintEngine:
                         clip=crop2,
                     )
 
-                bitmap = self._mono_raster_rows(pix)
+                bitmap = self._mono_raster_rows(pix, self.THRESHOLD)
                 output += self._escpos_raster(pix.width, pix.height, bitmap)
                 if page_index < document.page_count - 1:
                     output += b"\n\n"
