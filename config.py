@@ -7,7 +7,7 @@ class Settings:
     host: str = os.getenv("RB_AGENT_HOST", "127.0.0.1")
     port: int = int(os.getenv("RB_AGENT_PORT", "8765"))
     app_name: str = "RB Device Agent"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     erpnext_url: str = os.getenv("RB_AGENT_ERPNEXT_URL", "").strip()
     erpnext_token: str = os.getenv("RB_AGENT_TOKEN", "").strip()
     erpnext_timeout: float = float(os.getenv("RB_AGENT_ERPNEXT_TIMEOUT", "15"))
