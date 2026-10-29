@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/pos-printer-routing
+      - fix/windowed-print-agent-startup
       - milestone-2-desktop-installer
       - milestone-1-foundation
   workflow_dispatch:
@@ -39,6 +40,9 @@ jobs:
             --hidden-import=win32crypt `
             --hidden-import=win32event `
             --hidden-import=win32api `
+            --hidden-import=uvicorn.loops.asyncio `
+            --hidden-import=uvicorn.protocols.http.h11_impl `
+            --hidden-import=uvicorn.lifespan.on `
             --hidden-import=win32gui `
             --hidden-import=win32ui `
             --hidden-import=PIL.ImageWin `
@@ -46,6 +50,20 @@ jobs:
             --collect-all pystray `
             --collect-all PIL `
             desktop_app.py
+
+      - name: Verify windowed executable starts the POS bridge
+        shell: powershell
+        run: |
+          $result = Join-Path $PWD "startup-result.json"
+          $agent = Start-Process -FilePath "dist\RB Print Agent.exe" -ArgumentList "--self-test", "`"$result`"" -PassThru
+          if (-not $agent.WaitForExit(60000)) {
+            Stop-Process -Id $agent.Id -Force
+            throw "Windowed agent startup test timed out."
+          }
+          if (-not (Test-Path $result)) { throw "Windowed agent did not produce its startup result." }
+          $check = Get-Content -Raw $result | ConvertFrom-Json
+          if (-not $check.ok) { throw $check.error }
+          Write-Host "Windowed POS bridge started: $($check.health | ConvertTo-Json -Compress)"
 
       - name: Install Inno Setup
         shell: powershell
