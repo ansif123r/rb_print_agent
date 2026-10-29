@@ -1,5 +1,5 @@
 #define MyAppName "RB Print Agent"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.0.1"
 #define MyAppPublisher "R B FRESH MART"
 #define MyAppExeName "RB Print Agent.exe"
 #define MyAppIcon "rb_fresh_mart.ico"

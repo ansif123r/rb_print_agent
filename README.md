@@ -94,3 +94,21 @@ Do not replace or uninstall the Local POS Controller for this printing update.
 Validation: `python -m unittest discover -s tests -v` (install `httpx` for API tests).
 Physical printer output and the Save As dialog should be checked on the POS PC
 once after installation, using POS80, another printer, and Microsoft Print to PDF.
+
+## Version 2.0.1 startup correction
+
+The windowed 2.0.0 executable could pass Test ERP Connection while its local HTTP
+thread failed during Uvicorn console-formatter setup (`stdout`/`stderr` are absent
+in a windowed executable). The local server now uses desktop-safe logging and
+explicit packaged protocol modules. Runtime logs are retained under
+`%LOCALAPPDATA%\RB Print Agent\logs\agent.log`.
+
+Settings now offers **Test ERP Connection** and **Test POS Connection** separately.
+The latter checks the local bridge used by the POS browser. Click **Save & Start**
+after changing settings. This update retains the existing URL/token and printer
+choices; no further ERP deployment is needed when the selected-printer update is
+already installed.
+
+The Windows build launches the actual windowed EXE with a non-printing startup
+check and verifies its `/health` response before packaging the installer. This
+catches runtime startup failures that compilation and mocked printer tests miss.

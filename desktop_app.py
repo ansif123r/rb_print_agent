@@ -12,12 +12,12 @@ import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 
 import requests
-import uvicorn
+from local_server import create_server
 
 from config_store import is_configured, load_config, save_config
 
 APP_NAME = "RB Print Agent"
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 DEFAULT_URL = "https://rbfreshmart.m.frappe.cloud"
 
 
@@ -90,8 +90,9 @@ class SettingsWindow:
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", side="bottom")
-        ttk.Button(buttons, text="Test Connection", command=self.test_connection).pack(side="left")
+        ttk.Button(buttons, text="Test ERP Connection", command=self.test_connection).pack(side="left")
         ttk.Button(buttons, text="Test Printer", command=self.test_printer).pack(side="left", padx=8)
+        ttk.Button(buttons, text="Test POS Connection", command=self.test_pos_connection).pack(side="left")
         ttk.Button(buttons, text="Save & Start", command=self.save).pack(side="right")
 
         self.refresh_printers()
@@ -131,6 +132,18 @@ class SettingsWindow:
             self.status_var.set(f"Connection failed: {exc}")
             messagebox.showerror(APP_NAME, f"ERPNext connection failed:\n\n{exc}", parent=self.root)
 
+    def test_pos_connection(self) -> None:
+        try:
+            response = requests.get('http://127.0.0.1:8766/health', timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            if data.get('protocol') != 2:
+                raise ValueError('An incompatible application is using the POS connection port.')
+            self.status_var.set(f"Local POS connection ready. RB Print Agent {data.get('version', '')} on port 8766.")
+        except Exception as exc:
+            self.status_var.set('Local POS connection is not ready. Click Save & Start to restart the agent.')
+            messagebox.showerror(APP_NAME, f"Local POS connection failed:\n\n{exc}", parent=self.root)
+
     def test_printer(self) -> None:
         printer = self.printer_var.get().strip()
         if not printer:
@@ -165,7 +178,7 @@ class SettingsWindow:
         self.root.destroy()
 
 
-def start_services(save_dialog=None) -> None:
+def start_services(save_dialog=None, on_error=None) -> None:
     configure_environment()
     from api import app
     from config import settings
@@ -184,7 +197,12 @@ def start_services(save_dialog=None) -> None:
         logging.getLogger("rb_device_agent").warning("ERPNext queue worker disabled: agent is not configured.")
 
     def serve() -> None:
-        uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")
+        try:
+            create_server(app, settings.host, settings.port).run()
+        except (Exception, SystemExit):
+            logging.exception('Local POS printer server failed to start.')
+            if on_error:
+                on_error('The local POS printer connection could not start. Close other RB Print Agent instances and restart. See the agent log for details.')
 
     threading.Thread(target=serve, name="rb-http", daemon=True).start()
 
@@ -236,7 +254,9 @@ def main() -> None:
                 root.attributes('-topmost', False)
         root.after(100, process_dialogs)
     root.after(100, process_dialogs)
-    start_services(ask_save)
+    def server_error(message):
+        root.after(0, lambda: messagebox.showerror(APP_NAME, message, parent=root))
+    start_services(ask_save, server_error)
 
     # Keep a small tray/settings window available without opening a console.
     try:
@@ -267,6 +287,22 @@ def main() -> None:
     root.mainloop()
 
 
+def configure_desktop_logging():
+    from logging.handlers import RotatingFileHandler
+    from print_bridge import data_directory
+    directory = data_directory() / 'logs'
+    directory.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(level=logging.INFO,
+        format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        handlers=[RotatingFileHandler(directory / 'agent.log', maxBytes=1024*1024, backupCount=2, encoding='utf-8')],
+        force=True)
+
+
 if __name__ == "__main__":
-    main()
+    if '--self-test' in sys.argv:
+        from startup_check import run_check
+        run_check(sys.argv[sys.argv.index('--self-test') + 1])
+    else:
+        configure_desktop_logging()
+        main()
 
