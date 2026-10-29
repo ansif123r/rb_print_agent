@@ -1,5 +1,5 @@
 #define MyAppName "RB Print Agent"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "R B FRESH MART"
 #define MyAppExeName "RB Print Agent.exe"
 #define MyAppIcon "rb_fresh_mart.ico"
@@ -21,6 +21,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 SetupIconFile=..\rb_fresh_mart.ico
 UninstallDisplayIcon={app}\{#MyAppIcon}
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "..\dist\RB Print Agent.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -28,13 +30,16 @@ Source: "..\rb_fresh_mart.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\RB Print Agent Settings"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppIcon}"
-Name: "{userstartup}\RB Print Agent"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppIcon}"
+
+[InstallDelete]
+Type: files; Name: "{userstartup}\RB Print Agent.lnk"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "RB Print Agent"; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Start RB Print Agent now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Start RB Print Agent now"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM ""{#MyAppExeName}"" /F >NUL 2>&1"; Flags: runhidden
+

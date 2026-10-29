@@ -74,3 +74,4 @@ def save_config(erpnext_url: str, token: str, printer_name: str, timeout: float 
 def is_configured() -> bool:
     data = load_config()
     return bool(data.get("erpnext_url") and data.get("erpnext_token") and data.get("printer_name"))
+

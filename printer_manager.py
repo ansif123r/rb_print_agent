@@ -31,12 +31,12 @@ class PrinterManager:
             self._win32print.PRINTER_ENUM_LOCAL
             | self._win32print.PRINTER_ENUM_CONNECTIONS
         )
-        printers = self._win32print.EnumPrinters(flags)
+        printers = self._win32print.EnumPrinters(flags, None, 4)
         result: list[PrinterInfo] = []
 
         for entry in printers:
-            # EnumPrinters returns (flags, description, name, comment) for level 1.
-            name = str(entry[2])
+            # Level 4 lists local/user connections without opening every remote device.
+            name = str(entry['pPrinterName'])
             result.append(PrinterInfo(name=name))
 
         return sorted(result, key=lambda item: item.name.lower())
@@ -47,3 +47,11 @@ class PrinterManager:
     def printer_exists(self, printer_name: str) -> bool:
         target = printer_name.strip().casefold()
         return any(item.name.casefold() == target for item in self.list_printers())
+
+    def driver_name(self, printer_name: str) -> str:
+        handle = self._win32print.OpenPrinter(printer_name)
+        try:
+            return str(self._win32print.GetPrinter(handle, 2).get('pDriverName') or '')
+        finally:
+            self._win32print.ClosePrinter(handle)
+

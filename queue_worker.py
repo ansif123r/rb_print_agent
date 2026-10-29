@@ -38,15 +38,24 @@ class QueueWorker:
         engine = PrintEngine()
         for job in jobs:
             job_name = str(job["name"])
+            # A refused claim must not touch the spooler or overwrite another
+            # worker's status. New POS selections use the local bridge instead.
             try:
                 client.update_job_status(job_name, "Printing")
+            except Exception:
+                logger.exception("Could not claim ERPNext print job %s", job_name)
+                continue
+            try:
                 payload = job.get("payload")
                 if not payload:
                     raise ValueError("Print job has no payload")
 
                 copies = max(1, min(int(job.get("copies") or 1), 20))
                 for _ in range(copies):
-                    engine.print_payload(settings.printer_name, str(payload))
+                    printer = str(job.get('printer_name') or '')
+                    if not printer or printer != settings.printer_name:
+                        raise ValueError('Queued printer does not match this legacy worker.')
+                    engine.print_payload(printer, str(payload))
 
                 client.update_job_status(job_name, "Printed")
                 logger.info("Printed ERPNext job %s", job_name)
@@ -56,3 +65,4 @@ class QueueWorker:
                     client.update_job_status(job_name, "Failed", str(exc))
                 except Exception:
                     logger.exception("Could not report failure for job %s", job_name)
+

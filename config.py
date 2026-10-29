@@ -9,9 +9,9 @@ _config = load_config()
 @dataclass(frozen=True)
 class Settings:
     host: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 8766  # 8765 belongs to the separate offline Local POS Controller.
     app_name: str = "RB Print Agent"
-    version: str = "0.3.0"
+    version: str = "2.0.0"
     erpnext_url: str = str(_config.get("erpnext_url", "")).strip()
     erpnext_token: str = str(_config.get("erpnext_token", "")).strip()
     erpnext_timeout: float = float(_config.get("erpnext_timeout", 15))
@@ -20,3 +20,4 @@ class Settings:
 
 
 settings = Settings()
+

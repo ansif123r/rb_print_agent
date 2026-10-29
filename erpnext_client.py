@@ -51,3 +51,4 @@ class ERPNextClient:
                 "error_message": error_message,
             },
         )
+

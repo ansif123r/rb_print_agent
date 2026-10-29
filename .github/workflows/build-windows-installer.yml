@@ -3,6 +3,8 @@ name: Build Windows Installer
 on:
   push:
     branches:
+      - main
+      - fix/pos-printer-routing
       - milestone-2-desktop-installer
       - milestone-1-foundation
   workflow_dispatch:
@@ -24,6 +26,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install httpx
+
+      - name: Test printer routing
+        run: python -m unittest discover -s tests -v
 
       - name: Build executable
         run: |
@@ -31,6 +37,12 @@ jobs:
             --name "RB Print Agent" `
             --hidden-import=win32print `
             --hidden-import=win32crypt `
+            --hidden-import=win32event `
+            --hidden-import=win32api `
+            --hidden-import=win32gui `
+            --hidden-import=win32ui `
+            --hidden-import=PIL.ImageWin `
+            --collect-all pymupdf `
             --collect-all pystray `
             --collect-all PIL `
             desktop_app.py
@@ -72,3 +84,4 @@ jobs:
           name: RB-Print-Agent-Windows-Portable
           path: dist\RB Print Agent.exe
           if-no-files-found: error
+

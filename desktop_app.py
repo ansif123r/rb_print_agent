@@ -5,8 +5,11 @@ import os
 import subprocess
 import sys
 import threading
+import queue
+import re
+from concurrent.futures import Future
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, filedialog
 
 import requests
 import uvicorn
@@ -14,7 +17,7 @@ import uvicorn
 from config_store import is_configured, load_config, save_config
 
 APP_NAME = "RB Print Agent"
-VERSION = "1.0.1"
+VERSION = "2.0.0"
 DEFAULT_URL = "https://rbfreshmart.m.frappe.cloud"
 
 
@@ -38,14 +41,14 @@ def restart_application() -> None:
     if getattr(sys, "frozen", False):
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
         subprocess.Popen(
-            [executable],
+            [executable, "--restart"],
             env=env,
             close_fds=True,
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
     else:
         subprocess.Popen(
-            [executable, os.path.abspath(__file__)],
+            [executable, os.path.abspath(__file__), "--restart"],
             env=env,
             close_fds=True,
         )
@@ -76,7 +79,7 @@ class SettingsWindow:
         self._field(frame, "ERPNext URL", self.url_var)
         self._field(frame, "RB Print Token", self.token_var, show="*")
 
-        ttk.Label(frame, text="Printer").pack(anchor="w", pady=(12, 4))
+        ttk.Label(frame, text="Legacy queue printer (choose POS printing devices in Receipt Printer)").pack(anchor="w", pady=(12, 4))
         row = ttk.Frame(frame)
         row.pack(fill="x")
         self.printer_combo = ttk.Combobox(row, textvariable=self.printer_var, state="readonly")
@@ -104,8 +107,6 @@ class SettingsWindow:
             printers = PrinterManager().list_printers()
             names = [item.name for item in printers]
             self.printer_combo["values"] = names
-            if names and self.printer_var.get() not in names:
-                self.printer_var.set(names[0])
             self.status_var.set(f"Found {len(names)} Windows printer(s).")
         except Exception as exc:
             self.status_var.set(f"Printer discovery failed: {exc}")
@@ -140,6 +141,9 @@ class SettingsWindow:
             from printer_manager import PrinterManager
             if not PrinterManager().printer_exists(printer):
                 raise RuntimeError(f"Printer not found: {printer}")
+            from print_bridge import default_format
+            if default_format(printer) != 'Thermal Receipt':
+                raise ValueError('Use Receipt Printer in POS to test an A4/PDF invoice. This button tests thermal receipts only.')
             PrintEngine().escpos_test_receipt(printer)
             self.status_var.set(f"Test receipt sent to {printer}.")
         except Exception as exc:
@@ -161,11 +165,13 @@ class SettingsWindow:
         self.root.destroy()
 
 
-def start_services() -> None:
+def start_services(save_dialog=None) -> None:
     configure_environment()
     from api import app
     from config import settings
     from queue_worker import QueueWorker
+    from print_bridge import PrintService
+    app.state.print_service = PrintService(save_dialog=save_dialog)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -184,14 +190,53 @@ def start_services() -> None:
 
 
 def main() -> None:
+    # The old installer had both Startup and Run entries. Only one process may
+    # own the device bridge and legacy queue, even during an upgrade.
+    import win32api, win32event, winerror
+    import time
+    for attempt in range(30 if '--restart' in sys.argv else 1):
+        mutex = win32event.CreateMutex(None, False, 'RBPrintAgent2')
+        if win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS:
+            break
+        win32api.CloseHandle(mutex)
+        if '--restart' not in sys.argv:
+            return
+        time.sleep(0.2)
+    else:
+        return
+    root = tk.Tk()
+    root.withdraw()
     if not is_configured():
-        root = tk.Tk()
-        root.withdraw()
         window = SettingsWindow(root)
+        window.root.protocol('WM_DELETE_WINDOW', root.destroy)
         root.mainloop()
         return
 
-    start_services()
+    requests_queue = queue.Queue()
+    def ask_save(title):
+        future = Future()
+        requests_queue.put((title, future))
+        return future.result()
+    def process_dialogs():
+        try:
+            title, future = requests_queue.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            try:
+                name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '-', title).strip('. ') or 'Invoice'
+                root.attributes('-topmost', True)
+                destination = filedialog.asksaveasfilename(parent=root,
+                    title='Save tax invoice as PDF', initialfile=name + '.pdf',
+                    defaultextension='.pdf', filetypes=[('PDF document', '*.pdf')], confirmoverwrite=True)
+                future.set_result(destination or None)
+            except Exception as exc:
+                future.set_exception(exc)
+            finally:
+                root.attributes('-topmost', False)
+        root.after(100, process_dialogs)
+    root.after(100, process_dialogs)
+    start_services(ask_save)
 
     # Keep a small tray/settings window available without opening a console.
     try:
@@ -204,10 +249,7 @@ def main() -> None:
         draw.text((19, 21), "RB", fill="black")
 
         def open_settings(icon: object, item: object) -> None:
-            root = tk.Tk()
-            root.withdraw()
-            SettingsWindow(root)
-            root.mainloop()
+            root.after(0, lambda: SettingsWindow(root))
 
         def quit_app(icon: object, item: object) -> None:
             icon.stop()  # type: ignore[attr-defined]
@@ -217,11 +259,14 @@ def main() -> None:
             pystray.MenuItem("RB Print Agent Settings", open_settings),
             pystray.MenuItem("Exit", quit_app),
         )
-        pystray.Icon("rb_print_agent", image, APP_NAME, menu).run()
+        icon = pystray.Icon("rb_print_agent", image, APP_NAME, menu)
+        threading.Thread(target=icon.run, name='rb-print-tray', daemon=True).start()
     except Exception:
         # Tray support is optional; the print worker can continue without it.
-        threading.Event().wait()
+        logging.exception('Tray icon unavailable; printer bridge remains active.')
+    root.mainloop()
 
 
 if __name__ == "__main__":
     main()
+

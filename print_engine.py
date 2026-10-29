@@ -30,7 +30,9 @@ class PrintEngine:
             try:
                 self._win32print.StartPagePrinter(handle)
                 try:
-                    self._win32print.WritePrinter(handle, payload)
+                    written = self._win32print.WritePrinter(handle, payload)
+                    if written != len(payload):
+                        raise IOError('Windows accepted only part of the receipt. Check the output before reprinting.')
                 finally:
                     self._win32print.EndPagePrinter(handle)
             finally:
@@ -136,9 +138,64 @@ class PrintEngine:
             raise ValueError("Invalid RBPDF1 base64 payload.") from exc
 
     def print_payload(self, printer_name: str, payload: str) -> None:
+        if payload.startswith('RBRAW1:'):
+            self.raw_bytes(printer_name, base64.b64decode(payload[7:], validate=True))
+            return
+        if payload.startswith('RBA4PDF1:'):
+            self.print_a4_pdf(printer_name, base64.b64decode(payload[9:], validate=True))
+            return
         if payload.startswith("RBPDF1:"):
             pdf_bytes = self.rbpdf_payload_to_bytes(payload)
             self.raw_bytes(printer_name, self.pdf_bytes_to_escpos(pdf_bytes))
             return
 
         self.raw_text(printer_name, payload)
+
+    def print_a4_pdf(self, printer_name: str, pdf_bytes: bytes, title='RB Tax Invoice') -> None:
+        """Use the selected Windows driver and A4 paper; never send ESC/POS to it."""
+        import fitz
+        import win32con
+        import win32gui
+        import win32ui
+        from PIL import Image, ImageWin
+
+        handle = self._win32print.OpenPrinter(printer_name)
+        dc = None
+        started = False
+        try:
+            mode = self._win32print.GetPrinter(handle, 2)['pDevMode']
+            if mode is None:
+                raise ValueError('This printer does not expose its paper settings. Check its Windows driver.')
+            mode.PaperSize = win32con.DMPAPER_A4
+            mode.Orientation = win32con.DMORIENT_PORTRAIT
+            mode.Fields = (mode.Fields | win32con.DM_PAPERSIZE | win32con.DM_ORIENTATION) & ~(win32con.DM_PAPERLENGTH | win32con.DM_PAPERWIDTH)
+            result = self._win32print.DocumentProperties(0, handle, printer_name, mode, mode,
+                                                win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER)
+            if result < 0:
+                raise ValueError('Windows rejected the A4 paper settings.')
+            dc = win32ui.CreateDCFromHandle(win32gui.CreateDC('WINSPOOL', printer_name, mode))
+            width, height = dc.GetDeviceCaps(win32con.HORZRES), dc.GetDeviceCaps(win32con.VERTRES)
+            if width <= 0 or height <= 0:
+                raise ValueError('The selected printer has no printable A4 area.')
+            with fitz.open(stream=pdf_bytes, filetype='pdf') as document:
+                if not 0 < document.page_count <= 200:
+                    raise ValueError('Invoice PDF must contain 1 to 200 pages.')
+                dc.StartDoc(title); started = True
+                for page in document:
+                    pix = page.get_pixmap(dpi=200, colorspace=fitz.csRGB, alpha=False)
+                    image = Image.frombytes('RGB', (pix.width, pix.height), pix.samples)
+                    scale = min(width / pix.width, height / pix.height)
+                    output_width, output_height = int(pix.width * scale), int(pix.height * scale)
+                    x, y = (width - output_width) // 2, (height - output_height) // 2
+                    dc.StartPage()
+                    ImageWin.Dib(image).draw(dc.GetHandleOutput(), (x, y, x + output_width, y + output_height))
+                    dc.EndPage()
+                dc.EndDoc(); started = False
+        finally:
+            if dc:
+                try:
+                    if started: dc.AbortDoc()
+                finally:
+                    dc.DeleteDC()
+            self._win32print.ClosePrinter(handle)
+
