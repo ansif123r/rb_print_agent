@@ -10,6 +10,9 @@ on:
       - milestone-1-foundation
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -103,3 +106,31 @@ jobs:
           path: dist\RB Print Agent.exe
           if-no-files-found: error
 
+  publish-installer:
+    needs: build-windows
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency: rb-print-agent-stable-release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: RB-Print-Agent-Windows-Installer
+          path: installer
+      - name: Publish the tested installer at the permanent download URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          installers=(installer/RB-Print-Agent-Setup-*.exe)
+          [[ ${#installers[@]} == 1 && -s "${installers[0]}" ]]
+          cp "${installers[0]}" RB-Print-Agent-Setup.exe
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo "A newer main build will publish the installer."
+            exit 0
+          fi
+          gh release create "windows-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" RB-Print-Agent-Setup.exe \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "$(basename "${installers[0]}" .exe)" --notes "Windows installer from commit $GITHUB_SHA."
